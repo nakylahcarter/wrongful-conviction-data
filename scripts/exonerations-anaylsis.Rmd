@@ -1,0 +1,767 @@
+---
+title: "Exoneration Anaylsis"
+output: html_notebook
+---
+
+Data downloaded: March 19, 2024
+Dataset last updated: March 11, 2024
+Data from: National Registry of Exonerations
+
+According to webpage: The Registry provides detailed information about every known exoneration in the United States since 1989 in which a person was wrongly convicted of a crime and later cleared of all the charges based on new evidence of innocence... The Registry also maintains a more limited database of known exonerations prior to 1989.
+
+Glossary: https://www.law.umich.edu/special/exoneration/Pages/glossary.aspx 
+Codes and meanings: https://www.law.umich.edu/special/exoneration/Pages/detaillist.aspx 
+
+What is one row of data? One exoneration case 
+
+Load libraries
+```{r}
+library(tidyverse)
+library(lubridate)
+library(readxl)
+```
+
+Load data 
+```{r}
+exonerations <- read_excel("data/publicspreadsheet.xlsx")
+
+glimpse(exonerations)
+```
+
+Change 'Age' column to correct format 
+```{r}
+exonerations <- exonerations %>% mutate_at(c("Age"), as.numeric)
+
+glimpse(exonerations)
+```
+
+*According to the glossary, here are the meanings for these column names:*
+F/MFE: False or Misleading Forsensic Evidence
+FC: False Confession
+ILD: Inadequate Legal Defense
+P/FA: Perjury or False Accusation
+MWID: Mistaken Witness ID
+OM: Official Misconduct
+
+Change names for clarity:
+```{r}
+exonerations <- rename(exonerations, false_evidence = `F/MFE`)
+exonerations <- rename(exonerations, false_confession = FC )
+exonerations <- rename(exonerations, inadequate_legal = ILD)
+exonerations <- rename(exonerations, perjury_false_acc = `P/FA`)
+exonerations <- rename(exonerations, mistakenwitness_id = MWID)
+exonerations <- rename(exonerations, official_misconduct = OM)
+
+as.tibble(exonerations)
+  
+```
+
+##Let's look at each column for integrity checks
+
+NAMES
+```{r}
+exonerations %>% 
+  filter(is.na(`Last Name`))
+
+exonerations %>% 
+  filter(is.na(`First Name`))
+
+exonerations <- exonerations %>% 
+  unite("full_name", `First Name`:`Last Name`, remove = FALSE) 
+
+exonerations %>% 
+  count(full_name) %>% 
+  arrange(desc(n))
+
+exonerations %>% 
+  filter(full_name== "Anthony_Mays")
+
+#There are names that repeat because they have been exonerated of more than one thing. There are 5 individuals who have been exonerated of 3 different convictions. That is the most exonerations a single individual has. 
+```
+AGE
+```{r}
+exonerations %>% 
+  filter(is.na(Age))
+#There are 26 entries when the Age value is "NA" After consulting with the organizations, N/A age values simply mean they did not have access or were able to obtain that information. For sake of anaylsis-- I will ignore those values. 
+
+range(exonerations$Age, na.rm = T)
+#The youngest age in the data is 11 years old; the oldest age in the data is 83 years old.
+
+exonerations %>% 
+  filter(Age == 11)
+
+exonerations %>% 
+  filter(Age == 83)
+
+exonerations %>% 
+  filter(Age<18)
+#320 of the cases involve minors
+
+```
+
+RACE
+```{r}
+#According to the glossary, Other includes Native Hawaiians and Pacific Islanders.
+exonerations %>% 
+  filter(is.na(Race))
+
+exonerations %>% 
+  count(Race) %>% 
+  arrange(desc(n))
+#Black, 1849; White, 1118; Hispanic, 434; Asian, 31; Native American (including Alaska Native), 25; 
+# Other, 21; Don't Know 8 
+```
+
+SEX
+```{r}
+#According to the glossary, Sex of exoneree, as exoneree identified at the time of the crime.
+exonerations %>% 
+  filter(is.na(Sex))
+
+exonerations %>% 
+  count(Sex)
+#Female 300; Male 3186
+```
+
+STATE
+```{r}
+exonerations %>% 
+  filter(is.na(State))
+
+#According to glossary, Federal cases begin with "Fed" followed by the abbreviation for the state the crime was committed in
+exonerations %>% 
+  filter(str_starts(State, "Fed"))
+#137 federal cases in the data 
+
+exonerations %>% 
+  filter(str_starts(State, "Fed")) %>% 
+  count(State) %>% 
+  arrange(desc(n))
+#NY has had 21 federal cases, CA 14, and Illinois, Louisiana and Tennessee have had 7. 
+#31 total federal case locations in the data
+
+exonerations %>% 
+  count(State)
+#There are 84 "States" in the data. 31 Federal case locations. 52 states including Guam, Puerto Rico and District of Columbia. 
+
+exonerations %>% 
+  count(State) %>% 
+  arrange(desc(n))
+#Illinois has the most exonerations with 531, followed by Texas with 467, NY 348 and California 280
+```
+
+COUNTY
+```{r}
+#According to glossary, For contiguous city/county units that have the same geographic borders, or for combined city/county political units, we just give the name (e.g., "San Francisco" or "Philadelphia"); According to the glossary, "If the conviction was in a federal court, the district where the trial occurred is indicated in parentheses (e.g. (Southern)). If there is only one federal district in that state, the field will be blank."
+
+exonerations %>% 
+  filter(is.na(County))
+#There are 61 values where there is a NA county value; All federal cases and cases in D.C.
+
+#According to the glossary, for "independent cities" that are separately governed and not a part of the counties that surround them, the county will be named as, e.g., "Norfolk City." 
+exonerations %>% 
+  filter(str_detect(County, "City")) %>% 
+  count(County) %>% 
+  arrange(desc(n))
+
+exonerations %>% 
+  count(County, State) %>% 
+  arrange(desc(n))
+#Cook County (Illinois) has the most exonerations out of all counties at 458. 
+
+exonerations %>% 
+  filter(County== "Cook") %>% 
+  count(County, State)
+#There is multiple Cook Counties in the data. I should keep this in mind.  
+```
+
+WORST CRIME DISPLAY
+```{r}
+exonerations %>% 
+  filter(is.na(`Worst Crime Display`))
+
+exonerations %>% 
+  count(`Worst Crime Display`) %>% 
+  arrange(desc(n))
+#1329 rows of the data is an exoneration case of a murder conviction, second most is 613 of drug possession convictions. There is one case that is labeled "Other"
+
+exonerations %>% 
+  filter(`Worst Crime Display`== "Other")
+#According to the tags, this case was misdemeanor case and was a "no crime" 
+```
+
+SENTENCE 
+```{r}
+exonerations %>% 
+  filter(is.na(Sentence))
+
+exonerations %>% 
+  count(Sentence) %>% 
+  arrange(desc(n))
+#500 life sentences exonerated, life without parole 276, probation 197
+```
+
+CONVICTED
+```{r}
+exonerations %>% 
+  filter(is.na(Convicted))
+
+range(exonerations$Convicted)
+#1956-2022
+
+exonerations %>% 
+  count(Convicted) %>% 
+  arrange(desc(n))
+#Although 1997 had the most convictions, it is not a large difference between the years nearby it. 
+```
+
+
+EXONERATED
+```{r}
+exonerations %>% 
+  filter(is.na(Exonerated))
+
+range(exonerations$Exonerated)
+#1989-2024
+
+exonerations %>% 
+  count(Exonerated) %>% 
+  arrange(desc(n))
+# In 2022, there was 251 exonerations-- the most of any year. 2016 has the second highest number of exonerations at 185. 
+```
+
+POSTING DATE: 
+This is the date the information was posted on the exoneration data base. This data base was last updated March 11, 2024.
+```{r}
+range(exonerations$`Posting Date`)
+```
+
+
+FALSE EVIDENCE, FALSE CONFESSION, INADEQUATE LEGAL DEFENSE, PERJURY OR FALSE ACCUSATION, DNA, MISTAKEN WITNESS ID, OFFICIAL MISCONDUCT
+```{r}
+#FALSE EVIDENCE; NA means not present in the case 
+exonerations %>% 
+  count(false_evidence)
+#883 exoneration cases had false or misleading forsenic evidence 
+
+#FALSE CONFESSION; NA means not present in the case 
+exonerations %>% 
+  count(false_confession)
+#440 exoneration cases had false confessions   
+
+#INADEQUATE LEGAL; NA means not present in the case 
+exonerations %>% 
+  count(inadequate_legal)
+#956 exoneration cases had inadequate legal defense
+
+#PERJURY OR FALSE ACCUSATION; NA means not present in the case 
+exonerations %>% 
+  count(perjury_false_acc)
+#2229 exoneration cases had perjury or false accusations
+
+#DNA; NA means not present in the case 
+exonerations %>% 
+  count(DNA)
+#DNA evidence was a factor in the factual basis of the exoneration for 596 cases. 
+
+#MISTAKEN WITNESS ID; NA means not present in the case
+exonerations %>% 
+  count(mistakenwitness_id)
+#964 exoneration cases had mistaken witness ID 
+
+#OFFICIAL MISCONDUCT; According to glossary, this means when police, prosecutors, or other government officials significantly abused their authority or the judicial process in a manner that contributed to the exoneree's conviction.
+exonerations %>% 
+  count(official_misconduct)
+#2089 exonerations had official misconduct 
+
+```
+
+DATE OF CRIME YEAR
+```{r}
+exonerations %>% 
+  filter(is.na(`Date of Crime Year`))
+
+range(exonerations$`Date of Crime Year`)
+#1955-2022 
+
+exonerations %>% 
+  count(`Date of Crime Year`) %>% 
+  arrange(desc(n))
+#Although 1994 had the most crime cases, it is not a large difference between the years nearby it.
+```
+
+
+Tackling the tags: (Tags and OM Tags)
+There are multiple tags the are cited in this data. The are separated by ";#"
+```{r}
+#I wanted to try to make a lookup table. 
+
+exonerations <- exonerations %>% 
+  mutate(case = 1:n()) %>% select(case, everything())
+
+tags_exonerations <- exonerations %>% 
+  separate_longer_delim(`Tags`, ";#") %>% 
+  mutate(tag_type = case_when(
+  Tags=="A" ~ "Arson Case",
+  Tags=="BM" ~ "Bitemark",
+  Tags=="CDC" ~ "Co-Defendant Confessed",
+  Tags=="CIU" ~ "Conviction Integrity Unit",
+  Tags=="CSH" ~ "Child Sex Abuse Hysteria Case",
+  Tags=="CV" ~ "Child Victim",
+  Tags=="F" ~ "Female Exoneree",
+  Tags=="FED" ~ "Federal Case", 
+  Tags=="H" ~ "Homocide",
+  Tags=="IO" ~ "Innocence Organization",
+  Tags=="JI" ~ "Jailhouse Informant", 
+  Tags=="JV" ~ "Juvenile Defendant",
+  Tags=="M" ~ "Misdemeanor",
+  Tags=="NC" ~ "No Crime Case",
+  Tags=="P" ~ "Guilty Plea Case",
+  Tags=="PH" ~ "Posthumous Exoneration", 
+  Tags=="SA" ~ "Sexual Assault",
+  Tags=="SBS" ~ "Shaken Baby Syndrome Case",
+  TRUE ~ NA
+), .after = Tags)
+
+tag_lookup <- tags_exonerations %>% 
+  filter(!is.na(Tags), !is.na(tag_type)) %>% 
+  select(Tags, tag_type) %>% 
+  distinct()
+
+#OM is official misconduct 
+om_tags_exonerations <- exonerations %>% 
+  separate_longer_delim(`OM Tags`, ";#") %>% 
+   mutate(om_type = case_when(
+  `OM Tags`=="PR" ~ "Prosecutor Misconduct",
+  `OM Tags`=="OF" ~ "Police Officer Misconduct",
+  `OM Tags`=="FA" ~ "Forensic Analyst Misconduct",
+  `OM Tags`=="CW" ~ "Child Welfare Worker Misconduct",
+  `OM Tags`=="WH" ~ "Withheld Exculpatory Evidence",
+  `OM Tags`=="NW" ~ "Misconduct That is not Withholding Evidence",
+  `OM Tags`=="KP" ~ "Knowingly Permitting Perjury",
+  `OM Tags`=="WT" ~ "Witness Tampering or Misconduct Interrogating Co-defendant", 
+  `OM Tags`=="INT" ~ "Misconduct in Interrogation of Exoneree",
+  `OM Tags`=="PJ" ~ "Perjury By Official",
+  `OM Tags`=="PL" ~ "Prosecutor Lied in Court", 
+  TRUE ~ NA
+), .after = `OM Tags`)
+
+om_tag_lookup <- om_tags_exonerations %>% 
+  filter(!is.na(`OM Tags`), !is.na(om_type)) %>% 
+  select(`OM Tags`, om_type) %>% 
+  distinct()
+
+```
+
+## ANALYSIS
+
+How many exoneration cases did an innocence organization help secure the exoneration? (IO Tag)
+A: 995 of the exoneration cases had help from innoncence organizations, with 469 of them involving murder and 661 of them involving a Black person wrongfully convicted. 
+```{r}
+exonerations %>% 
+  filter(str_detect(Tags, "IO"))
+#995 of the exoneration cases contain a tag for IO. 
+
+exonerations %>% 
+  filter(str_detect(Tags, "IO") & `Worst Crime Display`=="Murder")
+#469 exoneration cases involving murder got help from innocence organizations
+
+exonerations %>% 
+  filter(str_detect(Tags, "IO")) %>% 
+  count(Race) %>% 
+  arrange(desc(n))
+#661 exonerations involving a Black convict got the help from an innocence organization
+```
+How many exonerations happened after the convicted individual passed away?
+A: 26 exonerees were not cleared of their wrongful convictions until after they died. 14 of them were Black, making up over half of the exonerees who were exonerated after they died. Seven people who were sentenced to life died before they were exonerated. Three people who were sentenced to death died before they were exonerated. 
+```{r}
+exonerations %>% 
+  filter(str_detect(Tags, "PH"))
+#26 
+
+tags_exonerations %>% 
+  filter(Tags== "PH")
+#I can do it either way, but I originally did not make a lookup table so I used strings to find some answers instead. 
+
+exonerations %>% 
+  filter(str_detect(Tags, "PH")) %>% 
+  count(Race)
+#14 Black people died before they were exonerated, White; 8, Hispanic, 1; Don't Know:1
+
+14/26 #53.8% of exonerees exonerated after they died were Black people. 
+
+exonerations %>% 
+  filter(str_detect(Tags, "PH") & Sentence == "Life")
+#7 people sentenced to Life died before they were exonerated. 
+
+exonerations %>% 
+  filter(str_detect(Tags, "PH") & Sentence == "Life without parole") #0
+
+exonerations %>% 
+  filter(str_detect(Tags, "PH") & Sentence == "Death")
+#Three people in this data set sentenced to death for murder were exonerated after they died. 
+
+exonerations %>% 
+  filter(str_detect(Tags, "PH") & Race== "Black" & inadequate_legal == "ILD")
+#14 Black convicted people died before they were exonerated, and two of them had inadequate legal defense
+```
+
+Who was convicted the longest before they were exonerated?
+A: Abraham Bolden (29) and Lee Arthur Hester(14), both Black men, were wrongfully convicted for 58 years before they were exonerated. While Bolden's case was federal, it took place in Illinois and Hester's was an IL case also. Bolden's case was a "no crime case" and involved only what the case labeled as "Bribery." 
+
+Black exonerees in the data waited a total of 25,879 years altogether before they were exonerated after their convictions, over 14000 years more than White exonerees, the second highest amount of years combined of the dataset. 
+```{r}
+#First, I want to create a column that shows how many years are in between convictions and exonerations
+exonerations <- exonerations %>% mutate_at(c("Convicted"), as.numeric)
+exonerations <- exonerations %>% mutate_at(c("Exonerated"), as.numeric)
+
+exonerations <- exonerations %>% 
+  mutate(years_before_exon = Exonerated - Convicted, .after = Exonerated)
+
+exonerations %>% 
+  arrange(desc(years_before_exon)) 
+#Abraham Bolden (29) and Lee Arthur Hester(14), both Black men, were wrongfully convicted for 58 years before they were exonerated. While Bolden's case was federal, it took place in Illinois and Hester's was an IL case also. Bolden's case was a "no crime case" and involved only what the case labeled as "Bribery." 
+
+exonerations %>% 
+  group_by(Race) %>% 
+  summarise(sum_years_before_exon = sum(years_before_exon)) %>% 
+  arrange(desc(sum_years_before_exon))
+#Black exonerees in the data waited a total of 25,879 years altogether before they were exonerated after their convictions. White exonerees, 11226 years altogether. 
+
+25879-11226 
+
+exonerations %>% 
+  group_by(Race) %>% 
+  summarise(avg_years_before_exon = mean(years_before_exon)) %>% 
+  arrange(desc(avg_years_before_exon))
+#On average, Black exonerees wait nearly 14 years before they are exonerated of wrongful convictions. Native Americans also wait nearly 14 years before they are exonerated. 
+
+exonerations %>% 
+  filter(Race== "Native American") %>% 
+  count(Race)
+#There are only 25 Native Americans in the data set, yet they wait on average longer than any other race except Black people regarding being exonerated after convictions. 
+```
+
+How many cases were victim to police misconduct?
+A: 1516 exoneration cases involved police officer misconduct. 945 exoneration cases involving Black people involved officer misconduct. 62% of all exoneration cases in the data involving police officer misconduct involved a Black exoneree.  
+```{r}
+om_tags_exonerations %>% 
+  filter(`OM Tags`=="OF") %>% 
+  distinct(case, `OM Tags`)
+  
+exonerations %>% filter(str_detect(`OM Tags`, "OF"))
+#1516 cases of exonerations involved officer misconduct
+
+exonerations %>% 
+  filter(str_detect(`OM Tags`, "OF")) %>% 
+  count(Race) %>% 
+  arrange(desc(n))
+#945 cases of exoneration cases of Black exonerees involved officer misconduct, while 333 cases were White men and Hispanic 209.
+
+945/1516 
+#62% perecent 
+
+```
+
+How many women are there in the data? Which woman was wrongfully convicted the longest?
+A: There are 300 women in the data set who have been wrongfully convicted. Ann Shepard, a white woman in North Carolina, spent 40 years wrongfully convicted of her case. 
+```{r}
+exonerations %>% 
+  filter(Sex== "Female") %>% 
+  arrange(desc(years_before_exon))
+```
+How many cases involved false confession? 
+A: 440 cases involved false confessions. In cases that involved misconduct in interrogation of the exoneree, 243 of them resulted in false confessions. 55% of all cases involving false confessions also involved misconduct during the interrogation of the exoneree.
+
+False confessions are defined by the glossary as "the exoneree made a statement to law enforcement at any point during the proceedings which was interpreted or presented by law enforcement as an admission of participation in or presence at the crime, even if the statement was not presented at trial. A statement is not a confession if it was made to someone other than law enforcement. A statement that is not at odds with the defense is not a confession. A guilty plea is not a confession."
+```{r}
+exonerations %>% 
+  filter(!is.na(false_confession)) 
+#440
+
+exonerations %>% 
+  filter(!is.na(false_confession)) %>% 
+  count(Sex)
+#36 female, 404 male
+
+#There are 3186 men in the data and 300 women in the data
+exonerations %>% 
+  filter(Sex== "Male")
+
+36/300 #12% of all female cases in the data set involved false confessions
+404/3186 #Nearly 13% of all male cases in the data set involved false confessions
+
+om_tags_exonerations %>% 
+  filter(!is.na(false_confession) & `OM Tags`== "INT")
+#In cases that involved misconduct in interrogation of the exoneree, 243 of them resulted in false confessions.  
+
+243/440 #55% of all cases involving false confessions also involved misconduct during the interrogation of the exoneree.
+
+om_tags_exonerations %>% 
+  filter(!is.na(false_confession) & `OM Tags`== "INT") %>% 
+  count(County, State) %>% 
+  arrange(desc(n))
+#NINETY FIVE!! of all exoneration cases that involved misconduct in the interrogation of the exoneree resulting in false confessions in the data set originated in Cook County, Illinois. 
+
+95/243 #39% of cases that involved misconduct in interrogation of the exoneree resulting in false confessions were in Cook County, IL. 
+
+```
+
+What county has the most police misconduct cases? Misconduct in interrogation cases? 
+A: Cook County has the most police misconduct and misconduct during interrogation in exoneration cases. 
+```{r}
+#INT cases
+om_tags_exonerations %>% 
+  filter(`OM Tags`== "INT") %>% 
+  count(County, State) %>% 
+  arrange(desc(n))
+#95 cases with misconduct in interrogation of exoneree's were from Cook County, IL. 
+
+om_tags_exonerations %>% 
+  filter(`OM Tags`== "INT" & County== "Cook" & State== "Illinois") %>% 
+  count(Race)
+#Of the misconduct during interrogation in Cook County, IL, 64 of them were Black exonerees and 24 of them were Hispanic exonerees. 
+
+om_tags_exonerations %>% 
+  filter(`OM Tags`== "INT" & County== "Cook" & State== "Illinois") %>% 
+  count(Sex)
+#92 were male, 3 were female
+
+om_tags_exonerations %>% 
+  filter(`OM Tags`== "INT" & County== "Cook" & State== "Illinois" & Sex== "Female")
+
+#All three women were convicted of murder, with one of them being sentenced to death. The others were sentenced to 30 years and 50 years. All of them included a false confession, inadequate legal representation, and official misconduct. No DNA was used in any of the cases. 
+
+#OF
+om_tags_exonerations %>% 
+  filter(`OM Tags`== "OF") %>% 
+  count(County, State) %>% 
+  arrange(desc(n))
+#of the 341 cases involving police misconduct, 403 of them were from Cook County and 91 was from LA 
+
+```
+
+Was there anyone who was exonerated from more than one case? If so, how many?
+A: There were 55 exonerees that were exonerated for more than one conviction. 
+```{r}
+exonerations %>% 
+  count(full_name) %>% 
+  filter(n>1) %>% 
+  arrange(desc(n))
+
+exonerations %>% 
+  filter(full_name=="Anthony_Mays")
+```
+
+How many exoneration cases where the worst crime was drug possesion or sale? 
+A: 613 exoneration cases involved drug possesion or sale, 437 of those cases involved Black exonerees
+```{r}
+exonerations %>% 
+  filter(`Worst Crime Display`=="Drug Possession or Sale")
+
+exonerations %>% 
+  filter(`Worst Crime Display`=="Drug Possession or Sale") %>% 
+  count(Race) %>% 
+  arrange(desc(n))
+#437 cases involving Black people, 89 involving white, 79 hispanic 
+
+exonerations %>% 
+  filter(`Worst Crime Display`=="Drug Possession or Sale") %>% 
+  count(Sex)
+#Male 522, Female 91
+```
+How many cases appear where the exoneree's sentence was death?
+A: 139 cases (all for murder). Glynn Simmons at 22 years old was wrongfully convicted of murder in 1975 and waited 48 years before he was exonerated.  
+
+What race on average spends the longest time wrongfully convicted serving death row?
+A: There is one man in the data set that is Native American that was wrongfully convicted of murder sentenced to death for 25 years; therefore, this is the highest average because it is the only one of its race in the dataset. However, Black people who have been sentenced to death who were wrongfully convicted on average are convicted 18.4 years before they are exonerated. This is about 4 years longest than the second highest average years wrongfully convicted, with White death exonerees averaging 14.8. 
+```{r}
+exonerations %>% 
+  filter(Sentence=="Death") 
+
+exonerations %>% 
+  filter(Sentence=="Death") %>% 
+  count(`Worst Crime Display`)
+
+exonerations %>% 
+  filter(Sentence=="Death") %>% 
+  group_by(Race) %>% 
+  summarise(years_before_exon=sum(years_before_exon)) %>% 
+  arrange(desc(years_before_exon))
+#Black exonerees combined have spent 1398 years wrongfully convicted before being exonerated, specially those on death row. White; 694 and Hispanic 191. 
+
+exonerations %>% 
+  filter(Sentence=="Death") %>% 
+  group_by(Race) %>% 
+  summarise(avg_years_before_exon=mean(years_before_exon)) %>% 
+  arrange(desc(avg_years_before_exon))
+
+exonerations %>% 
+  filter(Sentence=="Death" & Race=="Native American")
+
+```
+How many exonerees sentenced to death penalty had cases that involved the witholding of evidence? What is the average of death penalty cases that involved witholding of evidence? 
+A:99 exoneration death penalty cases involved the witholding of evidence. This makes up 71% of all death penalty cases. 
+```{r}
+om_tags_exonerations %>% 
+  filter(Sentence=="Death" & `OM Tags`=="WH")
+  
+99/139
+```
+
+How many of the death penalty cases involved officer misconduct? What is the average of this overall of death penalty cases?
+A: 111 death penalty cases involved officer misconduct, this makes up nearly 80% of all the death penalty cases in the dataset. 
+```{r}
+exonerations %>% 
+  filter(!is.na(official_misconduct) & Sentence=="Death")
+
+111/139
+```
+
+How many of the death penalty cases involved mistaken witness IDs? What is the average of this overall of death penalty cases?
+A:32 death row cases involved mistaken witness ids, 23% of all death row cases. 78% of the exoneration cases where the exonerees was sentenced to death and mistaken witness id were Black exonerees. 
+```{r}
+exonerations %>% 
+  filter(!is.na(mistakenwitness_id) & Sentence=="Death")
+32/139
+
+exonerations %>% 
+  filter(!is.na(mistakenwitness_id) & Sentence=="Death") %>% 
+  count(Race)
+25/32
+```
+
+How many women were sentenced to death that were wrongfully convicted?
+A: 3. One Black, one white, one hispanic
+```{r}
+exonerations %>% 
+  filter(Sentence=="Death" & Sex=="Female")
+```
+
+
+How many wrongful conviction cases involved perjury?
+A: 2229. 55% of these cases were cases involving Black exonerees (1227) White exonerees made up 30% of these cases. 
+```{r}
+exonerations %>% 
+  filter(!is.na(perjury_false_acc))
+
+exonerations %>% 
+  filter(!is.na(perjury_false_acc)) %>% 
+  count(Race) %>% 
+  arrange(desc(n))
+1227/2229
+679/2229
+```
+
+How many exonerees were wrongfully convicted before they were of legal age?
+A: 320 cases involved exonerees who had not turned 18 at the time of conviction. The youngest in the data set was Black 11 year old Lacresha Murray who was wrongfully convicted 5 years before being exonerated. 
+
+How many minors were sentenced to life for a crime they were innocent of?
+A: 54 cases of exonerees under 18 were sentenced to life. On average, minors who were wrongfully convicted and sentenced to life spend on average 18 years before their crimes are exonerated. 
+```{r}
+exonerations %>% 
+  filter(Age<18) %>% 
+  arrange(Age)
+
+exonerations %>% 
+  filter(Age<18 & Sentence=="Life") %>% 
+  summarise(avg_years= mean(years_before_exon))
+
+exonerations %>% 
+  filter(Age<18 & Sentence=="Life without Parole")
+
+exonerations %>% 
+  filter(Age<18 & Sentence=="Life") %>% 
+  count(Race)
+#35, Black; 15, White; 4, Hispanic
+
+exonerations %>% 
+  filter(Age<18 & Sentence=="Life") %>% 
+  count(Sex)
+#2 female, 52 male 
+
+exonerations %>% 
+  filter(Age<18) %>% 
+  count(County, State) %>% 
+  arrange(desc(n))
+#71 minors were wrongfully convicted in Cook County, IL
+```
+
+How many wrongful convictions were due to immigration?
+A: 4 cases and all cases involved prosecutor misconduct. All hispanic men, federal cases. 3 from California.
+```{r}
+exonerations %>% 
+  filter(`Worst Crime Display`=="Immigration")
+```
+
+How many cases were because of tax evasion?
+A: There were 7 cases because of tax evasion. All defendants were White, all federal cases with 30 being the youngest age. 5 of them were not sentenced. 
+```{r}
+exonerations %>% 
+  filter(`Worst Crime Display`=="Tax Evasion/Fraud")
+```
+
+What is the wrongful conviction makeup by race?
+A: 735 of all wrongful conviction cases of Black exonerees were murder cases (40%). 437 were drug possession cases(24%). Sexual assault make up 220 (12%), Robbery 110 (6%).
+
+White-- 395 Murder(35%); 194 Child Sex Abuse(17%); 118 Sexual Assault(11%); 89 Drug Possession(8%)
+Hispanic-- Murder(41%); Drug Possession/Sale(18%); Child Sex Abuse(8%); Sexual Assault(6%)
+Native American-- 45% Murder
+Asian--23% murder
+```{r}
+exonerations %>% 
+  filter(Race=="Black") %>% 
+  count(`Worst Crime Display`) %>% 
+  arrange(desc(n))
+#1849 wrongful conviction cases 
+735/1849
+437/1849
+220/1849
+110/1849
+
+exonerations %>% 
+  filter(Race=="White") %>% 
+  count(`Worst Crime Display`) %>% 
+  arrange(desc(n))
+#1118 wrongful conviction cases
+395/1118
+194/1118
+118/1118
+89/1118
+
+exonerations %>% 
+  filter(Race=="Hispanic") %>% 
+  count(`Worst Crime Display`) %>% 
+  arrange(desc(n))
+176/434
+79/434
+33/434
+26/434
+
+exonerations %>% 
+  filter(Race=="Native American") %>% 
+  count(`Worst Crime Display`) %>% 
+  arrange(desc(n))
+11/25
+
+exonerations %>% 
+  filter(Race=="Asian") %>% 
+  count(`Worst Crime Display`) %>% 
+  arrange(desc(n))
+7/31
+```
+
+How many wrongful convictions happened where no crime occurred? (Glossary:The exoneree was convicted of a crime that did not occur, either because an accident, act of self-defense, or a suicide was mistaken for a crime, or the exoneree was accused of a fabricated crime that never happened.)
+A:1391 cases involved a "No Crime" tag. 542 of these were because of drug possesion or sale and 250 were child abuse cases. 113 were because of murder and 96 were sexual assault. 
+```{r}
+tags_exonerations %>% 
+  filter(Tags=="NC")
+
+tags_exonerations %>% 
+  filter(Tags=="NC") %>% 
+  count(`Worst Crime Display`) %>% 
+  arrange(desc(n))
+  
+#542 of these were because of drug possesion or sale and 250 were child abuse cases. 113 were because of murder and 96 were sexual assault. 
+```
+
